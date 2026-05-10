@@ -1,0 +1,24 @@
+{
+  "name": "diary",
+  "version": "1.0.0",
+  "description": "日记应用",
+  "main": "app.js",
+  "scripts": {
+    "build": "esbuild js/app.js --bundle --outfile=dist/bundle.js --target=es6"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "esbuild": "^0.27.4"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.620.0",
+    "@aws-sdk/lib-storage": "^3.620.0",
+    "@aws-sdk/s3-request-presigner": "^3.620.0",
+    "@smithy/fetch-http-handler": "^3.2.4",
+    "@smithy/protocol-http": "^4.1.0",
+    "@smithy/querystring-builder": "^3.0.3",
+    "aws-crt": "^1.21.3"
+  }
+}

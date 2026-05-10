@@ -1,4 +1,4 @@
-{// 应用状态
+// 应用状态
 let currentDate = new Date();
 let entries = {};
 let settings = {
@@ -10,8 +10,8 @@ let settings = {
 };
 
 // 导入 AWS SDK
-// const { S3Client, GetObjectCommand, PutObjectCommand } = __webpack_require__(/*! @aws-sdk/client-s3 */ "./node_modules/@aws-sdk/client-s3/dist-es/index.js");
-// const { getSignedUrl } = __webpack_require__(/*! @aws-sdk/s3-request-presigner */ "./node_modules/@aws-sdk/s3-request-presigner/dist-es/index.js");
+import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // 默认事项模板
 const defaultTemplates = [
@@ -544,6 +544,30 @@ function initEventListeners() {
     // 保存设置
     document.getElementById('save-settings').addEventListener('click', saveSettings);
     
+    // 检查连接
+    document.getElementById('check-connection').addEventListener('click', async () => {
+        // 先保存当前设置
+        saveSettings();
+        
+        try {
+            showLoading('正在检查连接...');
+            const success = await checkS3Connect((error) => {
+                console.error('连接检查失败:', error);
+            });
+            
+            hideLoading();
+            if (success) {
+                showToast('连接成功！');
+            } else {
+                showToast('连接失败，请检查配置');
+            }
+        } catch (error) {
+            hideLoading();
+            console.error('检查连接时出错:', error);
+            showToast('检查连接时出错: ' + error.message);
+        }
+    });
+    
     // 同步按钮
     document.getElementById('sync-btn').addEventListener('click', syncToS3);
     
@@ -620,6 +644,40 @@ function isS3Configured() {
            settings.bucket && settings.bucket.trim();
 }
 
+// 检查 S3 连接
+async function checkS3Connect(callbackFunc) {
+    if (!isS3Configured()) {
+        const error = new Error('S3 配置不完整');
+        if (callbackFunc) callbackFunc(error);
+        return false;
+    }
+    
+    try {
+        const s3Client = createS3Client();
+        
+        const confCmd = {
+            Bucket: settings.bucket,
+            MaxKeys: 10
+        };
+        
+        const results = await s3Client.send(new ListObjectsV2Command(confCmd));
+        
+        if (!results || !results.$metadata || !results.$metadata.httpStatusCode) {
+            throw new Error('无效的 S3 响应');
+        }
+        
+        if (results.$metadata.httpStatusCode !== 200) {
+            throw new Error(`HTTP 状态码: ${results.$metadata.httpStatusCode}`);
+        }
+        
+        return true;
+    } catch (err) {
+        console.error('S3 连接检查失败:', err);
+        if (callbackFunc) callbackFunc(err);
+        return false;
+    }
+}
+
 // 同步到 S3
 async function syncToS3() {
     if (!isS3Configured()) {
@@ -634,11 +692,12 @@ async function syncToS3() {
         // 1. 先从 S3 拉取最新数据
         await fetchFromS3();
         
-        // 2. 合并本地数据
-        const localData = entries;
+        // 2. 获取当前日期的数据
+        const dateKey = formatDate(currentDate);
+        const currentData = entries[dateKey] || Array(13).fill('');
         
-        // 3. 上传合并后的数据到 S3
-        await uploadToS3(localData);
+        // 3. 上传当前日期的数据到 S3
+        await uploadToS3(currentData);
         
         hideLoading();
         showToast('同步成功');
@@ -652,40 +711,58 @@ async function syncToS3() {
 // 从 S3 拉取数据
 async function fetchFromS3() {
     if (!isS3Configured()) {
+        console.log('S3 未配置，跳过拉取');
         return;
     }
     
+    console.log('开始从 S3 拉取数据');
+    console.log('S3 配置:', {
+        endpoint: settings.endpoint,
+        bucket: settings.bucket,
+        region: settings.region
+    });
+    
     try {
         const s3Client = createS3Client();
-        const fileName = 'diary-data.json';
+        const dateKey = formatDate(currentDate);
+        const fileName = `${dateKey}.md`;
         
         const command = new GetObjectCommand({
             Bucket: settings.bucket,
             Key: fileName
         });
         
+        console.log('发送 S3 请求:', command.input);
         const response = await s3Client.send(command);
+        
+        console.log('S3 响应状态:', response.$metadata.httpStatusCode);
         
         // 处理响应体
         const body = await response.Body?.transformToString();
         if (body) {
-            const data = JSON.parse(body);
+            console.log('从 S3 获取的 MD 内容:', body);
             
-            // 合并数据：S3 数据 + 本地数据，以本地数据为准
-            for (const dateKey in data) {
-                if (!entries[dateKey]) {
-                    entries[dateKey] = data[dateKey];
-                }
-            }
+            // 解析 MD 内容为条目数组
+            const entriesArray = parseMdToEntries(body);
+            entries[dateKey] = entriesArray;
             
             saveLocalData();
             renderEntries();
+            console.log('S3 数据拉取成功');
         }
     } catch (error) {
         console.error('从 S3 拉取数据失败:', error);
+        console.error('错误详情:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+            $metadata: error.$metadata
+        });
         // 首次同步时文件不存在是正常的
         if (error.name !== 'NoSuchKey') {
             throw error;
+        } else {
+            console.log('文件不存在，这是首次同步的正常情况');
         }
     }
 }
@@ -698,13 +775,17 @@ async function uploadToS3(data) {
     
     try {
         const s3Client = createS3Client();
-        const fileName = 'diary-data.json';
+        const dateKey = formatDate(currentDate);
+        const fileName = `${dateKey}.md`;
+        
+        // 将条目数组转换为 MD 内容
+        const mdContent = entriesToMd(data);
         
         const command = new PutObjectCommand({
             Bucket: settings.bucket,
             Key: fileName,
-            Body: JSON.stringify(data),
-            ContentType: 'application/json'
+            Body: mdContent,
+            ContentType: 'text/markdown'
         });
         
         await s3Client.send(command);
@@ -739,11 +820,79 @@ function createS3Client() {
     return new S3Client({
         region: settings.region,
         endpoint: endpoint,
+        forcePathStyle: false,
         credentials: {
             accessKeyId: settings.accessKey,
             secretAccessKey: settings.secretKey
         }
     });
+}
+
+// 将条目数组转换为 MD 内容
+function entriesToMd(entriesArray) {
+    let mdContent = `# ${formatDate(currentDate)} 日记\n\n`;
+    
+    // 添加前12个输入框的内容（每行一个）
+    for (let i = 0; i < 12; i++) {
+        const content = entriesArray[i] || '';
+        mdContent += `${content}\n\n`;
+    }
+    
+    // 添加今日感想部分
+    const thoughts = entriesArray[12] || '';
+    mdContent += `## 今日感想\n\n${thoughts}\n`;
+    
+    return mdContent;
+}
+
+// 解析 MD 内容为条目数组
+function parseMdToEntries(mdContent) {
+    const entriesArray = Array(13).fill('');
+    
+    // 简单解析 MD 内容
+    const lines = mdContent.split('\n');
+    let contentLines = [];
+    let inMainContent = false;
+    let inThoughts = false;
+    
+    lines.forEach(line => {
+        // 跳过空行和标题行
+        if (line.trim() === '' || line.startsWith('# ')) {
+            return;
+        }
+        
+        // 检查是否是今日感想标题
+        if (line.startsWith('## 今日感想')) {
+            inMainContent = false;
+            inThoughts = true;
+            return;
+        }
+        
+        // 收集主要内容（前12个输入框）
+        if (!inThoughts) {
+            inMainContent = true;
+            contentLines.push(line);
+        } else {
+            // 收集今日感想内容（第13个输入框）
+            if (entriesArray[12]) {
+                entriesArray[12] += '\n' + line;
+            } else {
+                entriesArray[12] = line;
+            }
+        }
+    });
+    
+    // 将前12行内容分配到对应的输入框
+    for (let i = 0; i < 12 && i < contentLines.length; i++) {
+        entriesArray[i] = contentLines[i].trim();
+    }
+    
+    // 确保今日感想内容被正确处理
+    if (entriesArray[12]) {
+        entriesArray[12] = entriesArray[12].trim();
+    }
+    
+    return entriesArray;
 }
 
 // 生成预签名 URL
@@ -760,6 +909,7 @@ async function generatePresignedUrl(fileName, operation) {
         const command = new PutObjectCommand({
             Bucket: settings.bucket,
             Key: fileName,
+            Body: "",
             ContentType: 'application/json'
         });
         return await getSignedUrl(s3Client, command, { expiresIn: 3600 });
@@ -796,8 +946,4 @@ function hexEncode(buffer) {
     return Array.from(new Uint8Array(buffer))
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
-}
-
-
-//# sourceURL=webpack://diary/./app.js?
 }

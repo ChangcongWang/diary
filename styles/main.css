@@ -506,10 +506,12 @@ body {
 .modal-footer {
     padding: var(--spacing-6);
     border-top: 1px solid var(--border);
+    display: flex;
+    gap: var(--spacing-4);
 }
 
 .btn-primary {
-    width: 100%;
+    flex: 1;
     padding: var(--spacing-3);
     background: var(--primary);
     color: white;
@@ -523,6 +525,23 @@ body {
 
 .btn-primary:hover {
     background: var(--primary-hover);
+}
+
+.btn-secondary {
+    flex: 1;
+    padding: var(--spacing-3);
+    background: var(--border);
+    color: var(--foreground);
+    border: none;
+    border-radius: 8px;
+    font-size: var(--font-size-base);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--transition);
+}
+
+.btn-secondary:hover {
+    background: var(--hover-bg);
 }
 
 /* 加载遮罩 */
