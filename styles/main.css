@@ -109,6 +109,10 @@ body {
     justify-content: center;
 }
 
+.date-picker-wrapper {
+    position: relative;
+}
+
 .date-display {
     font-size: var(--font-size-lg);
     font-weight: 600;
@@ -118,179 +122,21 @@ body {
     transition: background var(--transition);
     user-select: none;
     white-space: nowrap;
+    border: none;
+    background: transparent;
+    color: inherit;
+    text-align: center;
+    font-family: inherit;
+    min-width: 120px;
 }
 
 .date-display:hover {
     background: var(--hover-bg);
 }
 
-/* 日期选择器 */
-.date-picker {
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1000;
-    background: var(--modal-bg);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    box-shadow: 0 10px 40px var(--shadow);
-    padding: var(--spacing-4);
-    min-width: 320px;
-    margin-top: 8px;
-}
-
-.date-picker-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: var(--spacing-4);
-    gap: var(--spacing-2);
-}
-
-.date-picker-current {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-2);
-}
-
-.date-picker-year-btn,
-.date-picker-month-btn {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-1);
-    padding: var(--spacing-2) var(--spacing-3);
+.date-display:focus {
+    outline: none;
     background: var(--hover-bg);
-    border: none;
-    border-radius: 6px;
-    color: var(--foreground);
-    font-size: var(--font-size-base);
-    font-weight: 600;
-    cursor: pointer;
-    transition: background var(--transition);
-}
-
-.date-picker-year-btn:hover,
-.date-picker-month-btn:hover {
-    background: var(--border);
-}
-
-.date-picker-prev-btn,
-.date-picker-next-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    border: 1px solid var(--border);
-    background: var(--background);
-    color: var(--foreground);
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all var(--transition);
-}
-
-.date-picker-prev-btn:hover,
-.date-picker-next-btn:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-}
-
-.date-picker-prev-btn svg,
-.date-picker-next-btn svg {
-    width: 16px;
-    height: 16px;
-}
-
-/* 视图 */
-.date-picker-view {
-    margin-top: var(--spacing-4);
-}
-
-.date-picker-year-range {
-    text-align: center;
-    font-size: var(--font-size-sm);
-    color: var(--muted-foreground);
-    margin-bottom: var(--spacing-2);
-}
-
-.date-picker-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--spacing-2);
-}
-
-.date-picker-year-grid {
-    grid-template-columns: repeat(4, 1fr);
-}
-
-.date-picker-grid-btn {
-    padding: var(--spacing-3);
-    background: var(--background);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--foreground);
-    font-size: var(--font-size-sm);
-    cursor: pointer;
-    transition: all var(--transition);
-    text-align: center;
-}
-
-.date-picker-grid-btn:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-}
-
-.date-picker-grid-btn.active {
-    background: var(--primary);
-    color: white;
-    border-color: var(--primary);
-}
-
-.date-picker-weekdays {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: var(--spacing-2);
-    margin-bottom: var(--spacing-2);
-}
-
-.date-picker-weekday {
-    text-align: center;
-    font-size: var(--font-size-sm);
-    color: var(--muted-foreground);
-    padding: var(--spacing-2);
-}
-
-.date-picker-days {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: var(--spacing-2);
-}
-
-.date-picker-day {
-    text-align: center;
-    padding: var(--spacing-2);
-    cursor: pointer;
-    border-radius: 6px;
-    transition: background var(--transition);
-    font-size: var(--font-size-base);
-}
-
-.date-picker-day:hover:not(.empty) {
-    background: var(--hover-bg);
-}
-
-.date-picker-day.selected {
-    background: var(--primary);
-    color: white;
-}
-
-.date-picker-day.today {
-    border: 2px solid var(--primary);
-}
-
-.date-picker-day.empty {
-    cursor: default;
 }
 
 /* 主内容区域 */

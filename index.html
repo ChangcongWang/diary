@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>日记</title>
     <link rel="stylesheet" href="/styles/main.css">
+    <link rel="stylesheet" href="/dist/bundle.css">
 </head>
 <body>
     <div id="app">
@@ -23,7 +24,9 @@
                         <polyline points="15 18 9 12 15 6"></polyline>
                     </svg>
                 </button>
-                <div class="date-display" id="current-date">2024-01-01</div>
+                <div class="date-picker-wrapper">
+                    <input type="text" id="date-picker-input" class="date-display">
+                </div>
                 <button class="icon-button" id="next-day" title="后一天">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="9 18 15 12 9 6"></polyline>

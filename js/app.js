@@ -13,6 +13,10 @@ let settings = {
 import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
+// 导入 flatpickr 日期选择器
+import flatpickr from 'flatpickr';
+import 'flatpickr/dist/flatpickr.min.css';
+
 // 默认事项模板
 const defaultTemplates = [
     '今日目标',
@@ -30,10 +34,7 @@ const defaultTemplates = [
     '明日计划'
 ];
 
-// 日期选择器状态
-let datePickerOpen = false;
-let datePickerDate = new Date();
-let datePickerView = 'days'; // 'days'、'year'、'month'
+// 当前下拉菜单
 let currentDropdownMenu = null;
 
 // 初始化
@@ -112,268 +113,58 @@ function saveLocalData() {
 }
 
 // 初始化日期显示
+// flatpickr 实例
+let flatpickrInstance = null;
+
 function initDateDisplay() {
+    // 检查 DOM 元素是否存在
+    const dateInput = document.getElementById('date-picker-input');
+    if (!dateInput) {
+        console.error('日期选择器输入框不存在');
+        return;
+    }
+    
+    console.log('初始化 flatpickr...');
+    
+    // 初始化 flatpickr 日期选择器
+    try {
+        flatpickrInstance = flatpickr(dateInput, {
+            dateFormat: 'Y-m-d',
+            defaultDate: currentDate,
+            onChange: function(selectedDates, dateStr) {
+                console.log('日期变更:', dateStr);
+                if (selectedDates.length > 0) {
+                    currentDate = selectedDates[0];
+                    renderEntries();
+                }
+            },
+            locale: {
+                firstDayOfWeek: 1,
+                weekdays: {
+                    shorthand: ['日', '一', '二', '三', '四', '五', '六'],
+                    longhand: ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+                },
+                months: {
+                    shorthand: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
+                    longhand: ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月']
+                }
+            }
+        });
+        
+        console.log('flatpickr 初始化成功:', flatpickrInstance);
+    } catch (error) {
+        console.error('flatpickr 初始化失败:', error);
+    }
+    
     updateDateDisplay();
-    
-    // 点击日期显示日期选择器
-    const dateDisplay = document.getElementById('current-date');
-    dateDisplay.addEventListener('click', (e) => {
-        toggleDatePicker();
-    });
-}
-
-// 切换日期选择器
-function toggleDatePicker() {
-    if (datePickerOpen) {
-        hideDatePicker();
-    } else {
-        showDatePicker();
-    }
-}
-
-// 显示日期选择器
-function showDatePicker() {
-    datePickerDate = new Date(currentDate);
-    datePickerView = 'days'; // 确保打开时显示日视图
-    
-    // 移除已存在的日期选择器
-    hideDatePicker();
-    
-    // 创建日期选择器
-    const datePicker = document.createElement('div');
-    datePicker.className = 'date-picker';
-    datePicker.id = 'date-picker';
-    datePicker.innerHTML = createDatePickerHTML();
-    
-    // 添加到日期显示容器
-    const dateDisplay = document.getElementById('current-date');
-    dateDisplay.style.position = 'relative';
-    dateDisplay.appendChild(datePicker);
-    
-    // 绑定事件
-    bindDatePickerEvents(datePicker);
-    
-    // 最后设置为打开状态
-    datePickerOpen = true;
-}
-
-// 隐藏日期选择器
-function hideDatePicker() {
-    const datePicker = document.getElementById('date-picker');
-    if (datePicker) {
-        datePicker.remove();
-    }
-    datePickerOpen = false;
-}
-
-// 创建日期选择器 HTML
-function createDatePickerHTML() {
-    const year = datePickerDate.getFullYear();
-    const month = datePickerDate.getMonth();
-    const today = new Date();
-    
-    // 生成星期标题
-    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-    let weekdaysHTML = weekdays.map(day => 
-        `<div class="date-picker-weekday">${day}</div>`
-    ).join('');
-    
-    // 生成日期
-    let daysHTML = '';
-    
-    if (datePickerView === 'days') {
-        // 获取月份信息
-        const firstDay = new Date(year, month, 1);
-        const lastDay = new Date(year, month + 1, 0);
-        const startDay = firstDay.getDay(); // 0-6, 0 is Sunday
-        const daysInMonth = lastDay.getDate();
-        
-        // 空白填充
-        for (let i = 0; i < startDay; i++) {
-            daysHTML += '<div class="date-picker-day empty"></div>';
-        }
-        
-        // 日期
-        for (let day = 1; day <= daysInMonth; day++) {
-            const date = new Date(year, month, day);
-            const isSelected = formatDate(date) === formatDate(currentDate);
-            const isToday = formatDate(date) === formatDate(today);
-            
-            let classes = 'date-picker-day';
-            if (isSelected) classes += ' selected';
-            if (isToday) classes += ' today';
-            
-            daysHTML += `<div class="${classes}" data-day="${day}">${day}</div>`;
-        }
-    }
-    
-    // 年视图的年范围
-    const yearStart = Math.floor(year / 12) * 12;
-    const yearEnd = yearStart + 11;
-    
-    return `
-        <div class="date-picker-header">
-            <button class="date-picker-prev-btn" title="上一年" data-action="prev">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="15 18 9 12 15 6"></polyline>
-                </svg>
-            </button>
-            <div class="date-picker-current">
-                <button class="date-picker-year-btn" data-view="year">${year}年</button>
-                <button class="date-picker-month-btn" data-view="month">${month + 1}月</button>
-            </div>
-            <button class="date-picker-next-btn" title="下一年" data-action="next">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="9 18 15 12 9 6"></polyline>
-                </svg>
-            </button>
-        </div>
-        
-        <!-- 年视图 -->
-        <div class="date-picker-view" style="display: ${datePickerView === 'year' ? 'block' : 'none'};">
-            <div class="date-picker-year-range">${yearStart}-${yearEnd}</div>
-            <div class="date-picker-grid date-picker-year-grid">
-                ${generateYearGridHTML(yearStart, year)}
-            </div>
-        </div>
-        
-        <!-- 月视图 -->
-        <div class="date-picker-view" style="display: ${datePickerView === 'month' ? 'block' : 'none'};">
-            <div class="date-picker-grid date-picker-month-grid">
-                ${generateMonthGridHTML(month)}
-            </div>
-        </div>
-        
-        <!-- 日视图 -->
-        <div class="date-picker-view" style="display: ${datePickerView === 'days' ? 'block' : 'none'};">
-            <div class="date-picker-weekdays">${weekdaysHTML}</div>
-            <div class="date-picker-days">${daysHTML}</div>
-        </div>
-    `;
-}
-
-// 生成年份网格HTML
-function generateYearGridHTML(yearStart, currentYear) {
-    let html = '';
-    for (let i = 0; i < 12; i++) {
-        const year = yearStart + i;
-        const isSelected = year === currentYear;
-        html += `<button class="date-picker-grid-btn ${isSelected ? 'active' : ''}" data-year="${year}">${year}</button>`;
-    }
-    return html;
-}
-
-// 生成月份网格HTML
-function generateMonthGridHTML(currentMonth) {
-    let html = '';
-    const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
-    for (let i = 0; i < 12; i++) {
-        const isSelected = i === currentMonth;
-        html += `<button class="date-picker-grid-btn ${isSelected ? 'active' : ''}" data-month="${i}">${months[i]}</button>`;
-    }
-    return html;
-}
-
-// 绑定日期选择器事件
-function bindDatePickerEvents(datePicker) {
-    // 左右箭头按钮
-    datePicker.querySelector('.date-picker-prev-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (datePickerView === 'days') {
-            // 减少一个月
-            datePickerDate.setMonth(datePickerDate.getMonth() - 1);
-        } else if (datePickerView === 'year') {
-            // 减少一年
-            datePickerDate.setFullYear(datePickerDate.getFullYear() - 12);
-        } else {
-            // 月份视图，减少一年
-            datePickerDate.setFullYear(datePickerDate.getFullYear() - 1);
-        }
-        updateDatePicker();
-    });
-    
-    datePicker.querySelector('.date-picker-next-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (datePickerView === 'days') {
-            // 增加一个月
-            datePickerDate.setMonth(datePickerDate.getMonth() + 1);
-        } else if (datePickerView === 'year') {
-            // 增加一年
-            datePickerDate.setFullYear(datePickerDate.getFullYear() + 12);
-        } else {
-            // 月份视图，增加一年
-            datePickerDate.setFullYear(datePickerDate.getFullYear() + 1);
-        }
-        updateDatePicker();
-    });
-    
-    // 年份按钮
-    const yearBtn = datePicker.querySelector('.date-picker-year-btn');
-    if (yearBtn) {
-        yearBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            datePickerView = 'year';
-            updateDatePicker();
-        });
-    }
-    
-    // 月份按钮
-    const monthBtn = datePicker.querySelector('.date-picker-month-btn');
-    if (monthBtn) {
-        monthBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            datePickerView = 'month';
-            updateDatePicker();
-        });
-    }
-    
-    // 年份选择
-    datePicker.querySelectorAll('[data-year]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const year = parseInt(btn.dataset.year);
-            datePickerDate.setFullYear(year);
-            datePickerView = 'month'; // 选择年份后跳到月份选择
-            updateDatePicker();
-        });
-    });
-    
-    // 月份选择
-    datePicker.querySelectorAll('[data-month]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const month = parseInt(btn.dataset.month);
-            datePickerDate.setMonth(month);
-            datePickerView = 'days'; // 选择月份后跳到日视图
-            updateDatePicker();
-        });
-    });
-    
-    // 选择日期
-    datePicker.querySelectorAll('.date-picker-day:not(.empty)').forEach(day => {
-        day.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const dayNum = parseInt(day.dataset.day);
-            currentDate = new Date(datePickerDate.getFullYear(), datePickerDate.getMonth(), dayNum);
-            updateDateDisplay();
-            renderEntries();
-            hideDatePicker();
-        });
-    });
-}
-
-// 更新日期选择器
-function updateDatePicker() {
-    const datePicker = document.getElementById('date-picker');
-    if (datePicker) {
-        datePicker.innerHTML = createDatePickerHTML();
-        bindDatePickerEvents(datePicker);
-    }
 }
 
 // 更新日期显示
 function updateDateDisplay() {
-    document.getElementById('current-date').textContent = formatDate(currentDate);
+    const dateInput = document.getElementById('date-picker-input');
+    if (dateInput) {
+        dateInput.value = formatDate(currentDate);
+    }
 }
 
 // 格式化日期
@@ -457,11 +248,6 @@ function updateEntry(index, value) {
 
 // 显示下拉菜单
 function showDropdown(button, index, input) {
-    // 关闭日期选择器（如果打开）
-    if (datePickerOpen) {
-        hideDatePicker();
-    }
-    
     const menu = document.createElement('div');
     menu.className = 'dropdown-menu';
     
@@ -580,19 +366,8 @@ function initEventListeners() {
         });
     });
     
-    // 点击其他地方关闭日期选择器和下拉菜单
+    // 点击其他地方关闭下拉菜单
     document.addEventListener('click', (e) => {
-        // 关闭日期选择器
-        if (datePickerOpen) {
-            const datePicker = document.getElementById('date-picker');
-            const dateDisplay = document.getElementById('current-date');
-            
-            // 如果点击不在日期选择器内，且不在日期显示区域
-            if (datePicker && !datePicker.contains(e.target) && !dateDisplay.contains(e.target)) {
-                hideDatePicker();
-            }
-        }
-        
         // 关闭下拉菜单
         if (currentDropdownMenu) {
             // 如果点击不在下拉菜单内
@@ -785,7 +560,9 @@ async function uploadToS3(data) {
             Bucket: settings.bucket,
             Key: fileName,
             Body: mdContent,
-            ContentType: 'text/markdown'
+            ContentType: 'text/markdown',
+            // 启用服务端加密（SSE-OSS）
+            ServerSideEncryption: 'AES256'
         });
         
         await s3Client.send(command);
@@ -810,14 +587,35 @@ async function autoFetchFromS3() {
     }
 }
 
-// 创建 S3 客户端
+// S3 客户端单例实例
+let s3ClientInstance = null;
+let lastConfigHash = null;
+
+// 生成配置哈希值，用于检测配置是否变化
+function getConfigHash() {
+    return `${settings.endpoint}-${settings.region}-${settings.accessKey}-${settings.secretKey}`;
+}
+
+// 创建 S3 客户端（单例模式）
 function createS3Client() {
-    let endpoint = settings.endpoint;
-    if (!endpoint.startsWith('http://') && !endpoint.startsWith('https://')) {
-        endpoint = 'https://' + endpoint;
+    const currentConfigHash = getConfigHash();
+    
+    // 如果配置没有变化且已有实例，直接返回
+    if (s3ClientInstance && lastConfigHash === currentConfigHash) {
+        return s3ClientInstance;
     }
     
-    return new S3Client({
+    let endpoint = settings.endpoint;
+    // 强制使用 HTTPS 确保传输层加密
+    if (!endpoint.startsWith('https://')) {
+        if (endpoint.startsWith('http://')) {
+            endpoint = endpoint.replace('http://', 'https://');
+        } else {
+            endpoint = 'https://' + endpoint;
+        }
+    }
+    
+    s3ClientInstance = new S3Client({
         region: settings.region,
         endpoint: endpoint,
         forcePathStyle: false,
@@ -826,6 +624,9 @@ function createS3Client() {
             secretAccessKey: settings.secretKey
         }
     });
+    
+    lastConfigHash = currentConfigHash;
+    return s3ClientInstance;
 }
 
 // 将条目数组转换为 MD 内容
@@ -893,57 +694,4 @@ function parseMdToEntries(mdContent) {
     }
     
     return entriesArray;
-}
-
-// 生成预签名 URL
-async function generatePresignedUrl(fileName, operation) {
-    const s3Client = createS3Client();
-    
-    if (operation === 'getObject') {
-        const command = new GetObjectCommand({
-            Bucket: settings.bucket,
-            Key: fileName
-        });
-        return await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-    } else {
-        const command = new PutObjectCommand({
-            Bucket: settings.bucket,
-            Key: fileName,
-            Body: "",
-            ContentType: 'application/json'
-        });
-        return await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-    }
-}
-
-// 工具函数：SHA256 哈希
-async function hash(string) {
-    const utf8 = new TextEncoder().encode(string);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', utf8);
-    return hashBuffer;
-}
-
-// 工具函数：HMAC-SHA256
-async function hmacSha256(message, key) {
-    const encoder = new TextEncoder();
-    const keyData = typeof key === 'string' ? encoder.encode(key) : key;
-    const messageData = encoder.encode(message);
-    
-    const cryptoKey = await crypto.subtle.importKey(
-        'raw',
-        keyData,
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-    );
-    
-    const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
-    return signature;
-}
-
-// 工具函数：十六进制编码
-function hexEncode(buffer) {
-    return Array.from(new Uint8Array(buffer))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
 }
