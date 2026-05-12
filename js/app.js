@@ -19,19 +19,10 @@ import 'flatpickr/dist/flatpickr.min.css';
 
 // 默认事项模板
 const defaultTemplates = [
-    '今日目标',
-    '工作任务',
-    '学习计划',
-    '运动记录',
-    '饮食习惯',
-    '睡眠状况',
-    '心情记录',
-    '重要事项',
-    '待办事项',
-    '阅读记录',
-    '社交活动',
-    '反思总结',
-    '明日计划'
+    '上班',
+    '摸鱼',
+    '睡觉',
+    '游戏'
 ];
 
 // 当前下拉菜单
@@ -181,7 +172,8 @@ function renderEntries() {
     container.innerHTML = '';
     
     const dateKey = formatDate(currentDate);
-    const dayEntries = entries[dateKey] || Array(13).fill('');
+    const dayEntry = entries[dateKey];
+    const dayEntries = (dayEntry && dayEntry.data) || Array(13).fill('');
     
     for (let i = 0; i < 13; i++) {
         const entryDiv = document.createElement('div');
@@ -240,9 +232,13 @@ function renderEntries() {
 function updateEntry(index, value) {
     const dateKey = formatDate(currentDate);
     if (!entries[dateKey]) {
-        entries[dateKey] = Array(13).fill('');
+        entries[dateKey] = {
+            data: Array(13).fill(''),
+            lastModified: Date.now()
+        };
     }
-    entries[dateKey][index] = value;
+    entries[dateKey].data[index] = value;
+    entries[dateKey].lastModified = Date.now();
     saveLocalData();
 }
 
@@ -464,15 +460,23 @@ async function syncToS3() {
     try {
         showLoading('正在同步...');
         
-        // 1. 先从 S3 拉取最新数据
-        await fetchFromS3();
+        // 1. 先从 S3 拉取最新数据（包含云端修改时间）
+        const cloudLastModified = await fetchFromS3();
         
         // 2. 获取当前日期的数据
         const dateKey = formatDate(currentDate);
-        const currentData = entries[dateKey] || Array(13).fill('');
+        const currentEntry = entries[dateKey];
+        const localLastModified = currentEntry?.lastModified || 0;
         
-        // 3. 上传当前日期的数据到 S3
-        await uploadToS3(currentData);
+        // 3. 比较修改时间：如果云端更新则跳过上传
+        if (cloudLastModified > localLastModified && cloudLastModified > 0) {
+            hideLoading();
+            showToast('云端数据更新，已跳过上传');
+            return;
+        }
+        
+        // 4. 上传当前日期的数据到 S3
+        await uploadToS3(currentEntry?.data || Array(13).fill(''));
         
         hideLoading();
         showToast('同步成功');
@@ -483,11 +487,11 @@ async function syncToS3() {
     }
 }
 
-// 从 S3 拉取数据
+// 从 S3 拉取数据（智能合并）
 async function fetchFromS3() {
     if (!isS3Configured()) {
         console.log('S3 未配置，跳过拉取');
-        return;
+        return 0;
     }
     
     console.log('开始从 S3 拉取数据');
@@ -512,19 +516,47 @@ async function fetchFromS3() {
         
         console.log('S3 响应状态:', response.$metadata.httpStatusCode);
         
+        // 获取云端文件的最后修改时间
+        const cloudLastModified = response.LastModified ? response.LastModified.getTime() : 0;
+        
         // 处理响应体
         const body = await response.Body?.transformToString();
         if (body) {
             console.log('从 S3 获取的 MD 内容:', body);
             
             // 解析 MD 内容为条目数组
-            const entriesArray = parseMdToEntries(body);
-            entries[dateKey] = entriesArray;
+            const cloudEntries = parseMdToEntries(body);
+            
+            // 获取本地现有数据
+            const localEntry = entries[dateKey];
+            const localEntries = (localEntry && localEntry.data) || Array(13).fill('');
+            
+            // 获取本地修改时间
+            const localLastModified = localEntry?.lastModified || 0;
+            
+            // 如果云端数据更新（云端时间 > 本地时间），直接覆盖本地所有数据
+            if (cloudLastModified > localLastModified) {
+                entries[dateKey] = {
+                    data: cloudEntries,
+                    lastModified: cloudLastModified
+                };
+                console.log('云端数据更新，已覆盖本地数据');
+            } else {
+                // 本地更新更晚或相同，保留本地数据（智能合并：保留本地非空行）
+                const mergedEntries = mergeEntries(localEntries, cloudEntries);
+                entries[dateKey] = {
+                    data: mergedEntries,
+                    lastModified: localLastModified
+                };
+                console.log('本地数据更新更晚，保留本地数据');
+            }
             
             saveLocalData();
             renderEntries();
-            console.log('S3 数据拉取成功');
+            console.log('S3 数据拉取成功（已智能合并）');
         }
+        
+        return cloudLastModified;
     } catch (error) {
         console.error('从 S3 拉取数据失败:', error);
         console.error('错误详情:', {
@@ -539,7 +571,28 @@ async function fetchFromS3() {
         } else {
             console.log('文件不存在，这是首次同步的正常情况');
         }
+        
+        return 0;
     }
+}
+
+// 智能合并本地和云端数据
+function mergeEntries(localEntries, cloudEntries) {
+    const merged = [];
+    
+    for (let i = 0; i < 13; i++) {
+        const localValue = localEntries[i] || '';
+        const cloudValue = cloudEntries[i] || '';
+        
+        // 如果本地有内容（非空），保留本地；否则使用云端数据
+        if (localValue.trim() !== '') {
+            merged.push(localValue);
+        } else {
+            merged.push(cloudValue);
+        }
+    }
+    
+    return merged;
 }
 
 // 上传到 S3
