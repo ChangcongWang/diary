@@ -1,3 +1,7 @@
+// 导入 Buffer polyfill（浏览器环境需要）
+import { Buffer } from 'buffer';
+globalThis.Buffer = Buffer;
+
 // 应用状态
 let currentDate = new Date();
 let entries = {};
@@ -15,7 +19,6 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // 导入 flatpickr 日期选择器
 import flatpickr from 'flatpickr';
-import 'flatpickr/dist/flatpickr.min.css';
 
 // 默认事项模板
 const defaultTemplates = [
