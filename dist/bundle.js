@@ -23795,6 +23795,20 @@ ${toHex(hashedRequest)}`;
     "\u6E38\u620F"
   ];
   var currentDropdownMenu = null;
+  document.addEventListener("gesturestart", (e2) => e2.preventDefault());
+  document.addEventListener("gesturechange", (e2) => e2.preventDefault());
+  document.addEventListener("touchstart", (e2) => {
+    if (e2.touches.length > 1) e2.preventDefault();
+  }, { passive: false });
+  document.addEventListener("touchmove", (e2) => {
+    if (e2.touches.length > 1) e2.preventDefault();
+  }, { passive: false });
+  document.addEventListener("wheel", (e2) => {
+    if (e2.ctrlKey || e2.metaKey) e2.preventDefault();
+  }, { passive: false });
+  document.addEventListener("keydown", (e2) => {
+    if ((e2.ctrlKey || e2.metaKey) && (e2.key === "+" || e2.key === "-" || e2.key === "0")) e2.preventDefault();
+  });
   document.addEventListener("DOMContentLoaded", () => {
     initTheme();
     loadSettings();
@@ -23860,13 +23874,11 @@ ${toHex(hashedRequest)}`;
       console.error("\u65E5\u671F\u9009\u62E9\u5668\u8F93\u5165\u6846\u4E0D\u5B58\u5728");
       return;
     }
-    console.log("\u521D\u59CB\u5316 flatpickr...");
     try {
       flatpickrInstance = esm_default(dateInput, {
         dateFormat: "Y-m-d",
         defaultDate: currentDate,
         onChange: function(selectedDates, dateStr) {
-          console.log("\u65E5\u671F\u53D8\u66F4:", dateStr);
           if (selectedDates.length > 0) {
             currentDate = selectedDates[0];
             renderEntries();
@@ -23884,16 +23896,14 @@ ${toHex(hashedRequest)}`;
           }
         }
       });
-      console.log("flatpickr \u521D\u59CB\u5316\u6210\u529F:", flatpickrInstance);
     } catch (error) {
       console.error("flatpickr \u521D\u59CB\u5316\u5931\u8D25:", error);
     }
     updateDateDisplay();
   }
   function updateDateDisplay() {
-    const dateInput = document.getElementById("date-picker-input");
-    if (dateInput) {
-      dateInput.value = formatDate(currentDate);
+    if (flatpickrInstance) {
+      flatpickrInstance.setDate(currentDate, false);
     }
   }
   function formatDate(date2) {
@@ -23944,6 +23954,11 @@ ${toHex(hashedRequest)}`;
       }
       entryDiv.appendChild(inputWrapper);
       container.appendChild(entryDiv);
+      if (i2 === 3 || i2 === 7) {
+        const separator = document.createElement("div");
+        separator.className = "entry-separator";
+        container.appendChild(separator);
+      }
     }
   }
   function updateEntry(index, value) {
@@ -23958,20 +23973,24 @@ ${toHex(hashedRequest)}`;
     entries[dateKey].lastModified = Date.now();
     saveLocalData();
   }
+  function getDropdownOptions() {
+    const dateKey = formatDate(currentDate);
+    const dayEntry = entries[dateKey];
+    const todayItems = [];
+    if (dayEntry && dayEntry.data) {
+      dayEntry.data.forEach((item) => {
+        if (item && item.trim() && !todayItems.includes(item.trim()) && !defaultTemplates.includes(item.trim())) {
+          todayItems.push(item.trim());
+        }
+      });
+    }
+    return [...todayItems, ...defaultTemplates];
+  }
   function showDropdown(button, index, input) {
     const menu = document.createElement("div");
     menu.className = "dropdown-menu";
-    let maxLength = 0;
-    defaultTemplates.forEach((template) => {
-      if (template.length > maxLength) {
-        maxLength = template.length;
-      }
-    });
-    if ("\u6E05\u7A7A".length > maxLength) {
-      maxLength = "\u6E05\u7A7A".length;
-    }
-    const estimatedWidth = maxLength * 16 + 32;
-    defaultTemplates.forEach((template) => {
+    const options = getDropdownOptions();
+    options.forEach((template) => {
       const item = document.createElement("div");
       item.className = "dropdown-item";
       item.textContent = template;
@@ -23994,11 +24013,17 @@ ${toHex(hashedRequest)}`;
       currentDropdownMenu = null;
     });
     menu.appendChild(clearItem);
-    const inputRect = input.getBoundingClientRect();
-    menu.style.right = `${window.innerWidth - inputRect.right}px`;
-    menu.style.top = `${inputRect.bottom + 4}px`;
-    menu.style.width = `${estimatedWidth}px`;
+    menu.style.visibility = "hidden";
     document.body.appendChild(menu);
+    const menuWidth = menu.offsetWidth;
+    const inputRect = input.getBoundingClientRect();
+    let menuLeft = inputRect.right - menuWidth;
+    if (menuLeft < 8) {
+      menuLeft = 8;
+    }
+    menu.style.left = `${menuLeft}px`;
+    menu.style.top = `${inputRect.bottom + 4}px`;
+    menu.style.visibility = "visible";
     currentDropdownMenu = menu;
   }
   function initEventListeners() {
@@ -24139,15 +24164,8 @@ ${toHex(hashedRequest)}`;
     return __async(this, null, function* () {
       var _a3;
       if (!isS3Configured()) {
-        console.log("S3 \u672A\u914D\u7F6E\uFF0C\u8DF3\u8FC7\u62C9\u53D6");
         return 0;
       }
-      console.log("\u5F00\u59CB\u4ECE S3 \u62C9\u53D6\u6570\u636E");
-      console.log("S3 \u914D\u7F6E:", {
-        endpoint: settings.endpoint,
-        bucket: settings.bucket,
-        region: settings.region
-      });
       try {
         const s3Client = createS3Client();
         const dateKey = formatDate(currentDate);
@@ -24156,9 +24174,7 @@ ${toHex(hashedRequest)}`;
           Bucket: settings.bucket,
           Key: fileName
         });
-        console.log("\u53D1\u9001 S3 \u8BF7\u6C42:", command.input);
         const response = yield s3Client.send(command);
-        console.log("S3 \u54CD\u5E94\u72B6\u6001:", response.$metadata.httpStatusCode);
         const cloudLastModified = response.LastModified ? response.LastModified.getTime() : 0;
         const body = yield (_a3 = response.Body) == null ? void 0 : _a3.transformToString();
         if (body) {
@@ -24179,25 +24195,16 @@ ${toHex(hashedRequest)}`;
               data: mergedEntries,
               lastModified: localLastModified
             };
-            console.log("\u672C\u5730\u6570\u636E\u66F4\u65B0\u66F4\u665A\uFF0C\u4FDD\u7559\u672C\u5730\u6570\u636E");
           }
           saveLocalData();
           renderEntries();
-          console.log("S3 \u6570\u636E\u62C9\u53D6\u6210\u529F\uFF08\u5DF2\u667A\u80FD\u5408\u5E76\uFF09");
         }
         return cloudLastModified;
       } catch (error) {
         console.error("\u4ECE S3 \u62C9\u53D6\u6570\u636E\u5931\u8D25:", error);
-        console.error("\u9519\u8BEF\u8BE6\u60C5:", {
-          name: error.name,
-          message: error.message,
-          stack: error.stack,
-          $metadata: error.$metadata
-        });
         if (error.name !== "NoSuchKey") {
           throw error;
         } else {
-          console.log("\u6587\u4EF6\u4E0D\u5B58\u5728\uFF0C\u8FD9\u662F\u9996\u6B21\u540C\u6B65\u7684\u6B63\u5E38\u60C5\u51B5");
         }
         return 0;
       }

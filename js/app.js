@@ -15,7 +15,7 @@ let settings = {
 
 // 导入 AWS SDK
 import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+// import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // 导入 flatpickr 日期选择器
 import flatpickr from 'flatpickr';
@@ -30,6 +30,22 @@ const defaultTemplates = [
 
 // 当前下拉菜单
 let currentDropdownMenu = null;
+
+// 禁止缩放
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('gesturechange', e => e.preventDefault());
+document.addEventListener('touchstart', e => {
+    if (e.touches.length > 1) e.preventDefault();
+}, { passive: false });
+document.addEventListener('touchmove', e => {
+    if (e.touches.length > 1) e.preventDefault();
+}, { passive: false });
+document.addEventListener('wheel', e => {
+    if (e.ctrlKey || e.metaKey) e.preventDefault();
+}, { passive: false });
+document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '0')) e.preventDefault();
+});
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -118,7 +134,7 @@ function initDateDisplay() {
         return;
     }
     
-    console.log('初始化 flatpickr...');
+    // console.log('初始化 flatpickr...');
     
     // 初始化 flatpickr 日期选择器
     try {
@@ -126,7 +142,7 @@ function initDateDisplay() {
             dateFormat: 'Y-m-d',
             defaultDate: currentDate,
             onChange: function(selectedDates, dateStr) {
-                console.log('日期变更:', dateStr);
+                // console.log('日期变更:', dateStr);
                 if (selectedDates.length > 0) {
                     currentDate = selectedDates[0];
                     renderEntries();
@@ -145,7 +161,7 @@ function initDateDisplay() {
             }
         });
         
-        console.log('flatpickr 初始化成功:', flatpickrInstance);
+        // console.log('flatpickr 初始化成功:', flatpickrInstance);
     } catch (error) {
         console.error('flatpickr 初始化失败:', error);
     }
@@ -155,9 +171,8 @@ function initDateDisplay() {
 
 // 更新日期显示
 function updateDateDisplay() {
-    const dateInput = document.getElementById('date-picker-input');
-    if (dateInput) {
-        dateInput.value = formatDate(currentDate);
+    if (flatpickrInstance) {
+        flatpickrInstance.setDate(currentDate, false);
     }
 }
 
@@ -228,6 +243,12 @@ function renderEntries() {
         
         entryDiv.appendChild(inputWrapper);
         container.appendChild(entryDiv);
+
+        if (i === 3 || i === 7) {
+            const separator = document.createElement('div');
+            separator.className = 'entry-separator';
+            container.appendChild(separator);
+        }
     }
 }
 
@@ -245,26 +266,29 @@ function updateEntry(index, value) {
     saveLocalData();
 }
 
+// 获取当前日期的下拉选项（默认模板 + 当天已写入的条目）
+function getDropdownOptions() {
+    const dateKey = formatDate(currentDate);
+    const dayEntry = entries[dateKey];
+    const todayItems = [];
+    if (dayEntry && dayEntry.data) {
+        dayEntry.data.forEach(item => {
+            if (item && item.trim() && !todayItems.includes(item.trim()) && !defaultTemplates.includes(item.trim())) {
+                todayItems.push(item.trim());
+            }
+        });
+    }
+    return [...todayItems, ...defaultTemplates];
+}
+
 // 显示下拉菜单
 function showDropdown(button, index, input) {
     const menu = document.createElement('div');
     menu.className = 'dropdown-menu';
     
-    // 找出最长的文本
-    let maxLength = 0;
-    defaultTemplates.forEach(template => {
-        if (template.length > maxLength) {
-            maxLength = template.length;
-        }
-    });
-    if ('清空'.length > maxLength) {
-        maxLength = '清空'.length;
-    }
+    const options = getDropdownOptions();
     
-    // 计算宽度
-    const estimatedWidth = maxLength * 16 + 32; // 每个字符约16px + padding
-    
-    defaultTemplates.forEach(template => {
+    options.forEach(template => {
         const item = document.createElement('div');
         item.className = 'dropdown-item';
         item.textContent = template;
@@ -290,13 +314,20 @@ function showDropdown(button, index, input) {
     });
     menu.appendChild(clearItem);
     
-    // 计算位置 - 右对齐输入框的末尾
-    const inputRect = input.getBoundingClientRect();
-    menu.style.right = `${window.innerWidth - inputRect.right}px`;
-    menu.style.top = `${inputRect.bottom + 4}px`;
-    menu.style.width = `${estimatedWidth}px`;
-    
+    // 先添加到 DOM 以获取实际宽度
+    menu.style.visibility = 'hidden';
     document.body.appendChild(menu);
+    
+    const menuWidth = menu.offsetWidth;
+    const inputRect = input.getBoundingClientRect();
+    let menuLeft = inputRect.right - menuWidth;
+    if (menuLeft < 8) {
+        menuLeft = 8;
+    }
+    menu.style.left = `${menuLeft}px`;
+    menu.style.top = `${inputRect.bottom + 4}px`;
+    menu.style.visibility = 'visible';
+    
     currentDropdownMenu = menu;
 }
 
@@ -493,16 +524,16 @@ async function syncToS3() {
 // 从 S3 拉取数据（智能合并）
 async function fetchFromS3() {
     if (!isS3Configured()) {
-        console.log('S3 未配置，跳过拉取');
+        // console.log('S3 未配置，跳过拉取');
         return 0;
     }
     
-    console.log('开始从 S3 拉取数据');
-    console.log('S3 配置:', {
-        endpoint: settings.endpoint,
-        bucket: settings.bucket,
-        region: settings.region
-    });
+    // console.log('开始从 S3 拉取数据');
+    // console.log('S3 配置:', {
+    //     endpoint: settings.endpoint,
+    //     bucket: settings.bucket,
+    //     region: settings.region
+    // });
     
     try {
         const s3Client = createS3Client();
@@ -514,10 +545,10 @@ async function fetchFromS3() {
             Key: fileName
         });
         
-        console.log('发送 S3 请求:', command.input);
+        // console.log('发送 S3 请求:', command.input);
         const response = await s3Client.send(command);
         
-        console.log('S3 响应状态:', response.$metadata.httpStatusCode);
+        // console.log('S3 响应状态:', response.$metadata.httpStatusCode);
         
         // 获取云端文件的最后修改时间
         const cloudLastModified = response.LastModified ? response.LastModified.getTime() : 0;
@@ -551,28 +582,27 @@ async function fetchFromS3() {
                     data: mergedEntries,
                     lastModified: localLastModified
                 };
-                console.log('本地数据更新更晚，保留本地数据');
+                // console.log('本地数据更新更晚，保留本地数据');
             }
             
             saveLocalData();
             renderEntries();
-            console.log('S3 数据拉取成功（已智能合并）');
+            // console.log('S3 数据拉取成功（已智能合并）');
         }
         
         return cloudLastModified;
     } catch (error) {
         console.error('从 S3 拉取数据失败:', error);
-        console.error('错误详情:', {
-            name: error.name,
-            message: error.message,
-            stack: error.stack,
-            $metadata: error.$metadata
-        });
-        // 首次同步时文件不存在是正常的
+        // console.error('错误详情:', {
+        //     name: error.name,
+        //     message: error.message,
+        //     stack: error.stack,
+        //     $metadata: error.$metadata
+        // });
         if (error.name !== 'NoSuchKey') {
             throw error;
         } else {
-            console.log('文件不存在，这是首次同步的正常情况');
+            // console.log('文件不存在，这是首次同步的正常情况');
         }
         
         return 0;
